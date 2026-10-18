@@ -11,7 +11,6 @@ from PIL import Image, UnidentifiedImageError
 # CONFIGURACIÓN — NUEVA ESTRUCTURA
 # ----------------------------------------------------------------------
 DATASET_ROOT = Path(r"/home/karva/JPGCONVERSIONDATASETCOPIA")
-# Apuntamos a las nuevas carpetas principales
 SPLITS = ["train_por_hueso", "valid_por_hueso"]  
 EXTENSIONES_VALIDAS = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff")
 OUTPUT_ROOT = Path(r"./reporte_calidad")
@@ -19,7 +18,7 @@ OUTPUT_ROOT.mkdir(exist_ok=True)
 
 
 # ----------------------------------------------------------------------
-# CONTROL 1 — Estructura de carpetas (Adaptado a Tipo de Hueso -> Paciente)
+# CONTROL 1 — Estructura de carpetas
 # ----------------------------------------------------------------------
 def control_1_estructura(split_path: Path):
     print("\n" + "=" * 70)
@@ -30,7 +29,6 @@ def control_1_estructura(split_path: Path):
         print(f"ERROR: la ruta {split_path} no existe.")
         return
 
-    # Aquí las subcarpetas son los tipos de hueso (ej. XR_FOREARM, XR_SHOULDER)
     tipos_hueso = [c for c in sorted(split_path.iterdir()) if c.is_dir()]
     if not tipos_hueso:
         print("No se encontraron carpetas de tipos de hueso.")
@@ -39,7 +37,7 @@ def control_1_estructura(split_path: Path):
     for tipo in tipos_hueso:
         print(f"\nTipo de Hueso: {tipo.name}")
         pacientes = [p for p in sorted(tipo.iterdir()) if p.is_dir()]
-        print(f"  Total pacientes: {len(pacientes)}")
+        print(f"  Total pacientes/estudios: {len(pacientes)}")
         for paciente in pacientes[:5]:
             n_archivos = sum(1 for f in paciente.rglob("*") if f.is_file())
             print(f"    {paciente.name}: {n_archivos} archivo(s)")
@@ -48,34 +46,38 @@ def control_1_estructura(split_path: Path):
 
 
 # ----------------------------------------------------------------------
-# CONTROL 2 — Cantidad de imágenes por tipo de hueso
+# CONTROL 2 — Cantidad de imágenes por tipo de hueso y etiqueta (Normal/Anormal)
 # ----------------------------------------------------------------------
-def control_2_cantidad(split_path: Path):
+def control_2_cantidad(df: pd.DataFrame, split_name: str):
     print("\n" + "=" * 70)
-    print(f"CONTROL 2 — CANTIDAD DE IMÁGENES ({split_path.name})")
+    print(f"CONTROL 2 — CANTIDAD DE IMÁGENES Y ETIQUETAS ({split_name})")
     print("=" * 70)
 
-    total_general = 0
-    conteo_por_hueso = {}
+    total_general = len(df)
+    
+    # Conteo por tipo de hueso
+    conteo_por_hueso = df["tipo_hueso"].value_counts().to_dict()
+    print("  Conteo por Tipo de Hueso:")
+    for hueso, cant in conteo_por_hueso.items():
+        print(f"    {hueso}: {cant} imágenes")
 
-    for tipo_dir in sorted(split_path.iterdir()):
-        if not tipo_dir.is_dir():
-            continue
-        cantidad = 0
-        for raiz, _, archivos in os.walk(tipo_dir):
-            for archivo in archivos:
-                if archivo.lower().endswith(EXTENSIONES_VALIDAS):
-                    cantidad += 1
-        conteo_por_hueso[tipo_dir.name] = cantidad
-        total_general += cantidad
-        print(f"  {tipo_dir.name}: {cantidad} imágenes")
+    # Conteo por etiqueta (normal / anormal)
+    conteo_etiqueta = df["etiqueta"].value_counts().to_dict()
+    print("\n  Conteo por Estado (Normal / Anormal / Desconocido):")
+    for etiqueta, cant in conteo_etiqueta.items():
+        print(f"    {etiqueta}: {cant} imágenes")
 
-    print(f"\n  ➤ TOTAL GENERAL EN {split_path.name}: {total_general} imágenes")
-    return conteo_por_hueso, total_general
+    # Conteo cruzado: Tipo de Hueso x Etiqueta
+    print("\n  Desglose cruzado (Tipo de Hueso x Estado):")
+    cruzado = pd.crosstab(df["tipo_hueso"], df["etiqueta"])
+    print(cruzado.to_string())
+
+    print(f"\n  ➤ TOTAL GENERAL EN {split_name}: {total_general} imágenes")
+    return conteo_por_hueso, total_general, cruzado
 
 
 # ----------------------------------------------------------------------
-# CONTROL 3 — Generación del DataFrame maestro
+# CONTROL 3 — Generación del DataFrame maestro (Detectando Normal/Anormal)
 # ----------------------------------------------------------------------
 def control_3_dataframe(split_path: Path, split_name: str):
     print("\n" + "=" * 70)
@@ -94,15 +96,26 @@ def control_3_dataframe(split_path: Path, split_name: str):
                     ruta_completa = Path(raiz) / archivo
                     try:
                         relativo = ruta_completa.relative_to(tipo_dir)
-                        # relativo.parts[0] suele ser el paciente (o estudio/paciente)
+                        # Buscamos en toda la ruta relativa si aparece 'normal' o 'abnormal'/'anormal'
+                        partes_str = "/".join(relativo.parts).lower()
+                        
+                        if "normal" in partes_str and "abnormal" not in partes_str:
+                            etiqueta = "normal"
+                        elif "abnormal" in partes_str or "anormal" in partes_str:
+                            etiqueta = "anormal"
+                        else:
+                            etiqueta = "desconocido"
+
                         paciente = relativo.parts[0] if len(relativo.parts) > 1 else "desconocido"
                     except (ValueError, IndexError):
                         paciente = "desconocido"
+                        etiqueta = "desconocido"
 
                     filas.append({
                         "split": split_name,
                         "tipo_hueso": tipo_hueso,
                         "paciente": paciente,
+                        "etiqueta": etiqueta,  # <--- NUEVA COLUMNA
                         "archivo": archivo,
                         "ruta": str(ruta_completa),
                         "extension": ruta_completa.suffix.lower(),
@@ -126,13 +139,6 @@ def control_4_formatos(df: pd.DataFrame):
     conteo_ext = Counter(df["extension"])
     for ext, cant in conteo_ext.most_common():
         print(f"  {ext}: {cant} archivo(s)")
-
-    formatos_incompatibles = {ext for ext in conteo_ext if ext not in [".jpg", ".jpeg", ".png"]}
-    if formatos_incompatibles:
-        print(f"\n  Formatos fuera de .jpg/.jpeg/.png detectados: {formatos_incompatibles}")
-    else:
-        print("\n  Todos los archivos están en formatos estándar (.jpg/.png).")
-    return conteo_ext
 
 
 # ----------------------------------------------------------------------
@@ -159,10 +165,6 @@ def control_5_integridad(df: pd.DataFrame):
 
     print(f"  Imágenes válidas: {df['integra'].sum()}")
     print(f"  Imágenes corruptas: {n_corruptas}")
-    if n_corruptas > 0:
-        print("\n  Archivos corruptos detectados:")
-        for ruta, err in errores[:20]:
-            print(f"    {ruta}  →  {err}")
     return df
 
 
@@ -196,20 +198,11 @@ def control_6_dimensiones(df: pd.DataFrame):
     df["ancho"] = anchos
     df["alto"] = altos
     df["modo"] = modos
-
-    print("  Distribución de modos de color:")
-    print(df["modo"].value_counts(dropna=False).to_string())
-
-    print("\n  Dimensiones más frecuentes (ancho x alto):")
-    dims = df.dropna(subset=["ancho", "alto"]).apply(
-        lambda r: f"{int(r['ancho'])}x{int(r['alto'])}", axis=1
-    )
-    print(dims.value_counts().head(10).to_string())
     return df
 
 
 # ----------------------------------------------------------------------
-# CONTROL 7 — Duplicados (MD5) y balance por tipo de hueso
+# CONTROL 7 — Duplicados (MD5) y balance por tipo de hueso y etiqueta
 # ----------------------------------------------------------------------
 def calcular_md5(ruta, bloque=8192):
     h = hashlib.md5()
@@ -246,22 +239,20 @@ def control_7_duplicados_balance(df: pd.DataFrame, conteo_por_hueso: dict, outpu
             for r in rutas:
                 filas_dup.append({"md5": h, "ruta": r})
         pd.DataFrame(filas_dup).to_csv(output_dir / "duplicados.csv", index=False)
-        print(f"  Detalle guardado en {output_dir / 'duplicados.csv'}")
 
-    print("\n  Balance por tipo de hueso:")
-    for hueso, cant in conteo_por_hueso.items():
-        print(f"    {hueso}: {cant}")
-
-    plt.figure(figsize=(10, 5))
-    plt.bar(conteo_por_hueso.keys(), conteo_por_hueso.values(), color="#4C72B0")
-    plt.title(f"Balance por Tipo de Hueso ({split_name})")
+    # Gráfico de barras agrupado por Normal/Anormal si es posible
+    plt.figure(figsize=(12, 6))
+    cruzado_plot = pd.crosstab(df["tipo_hueso"], df["etiqueta"])
+    cruzado_plot.plot(kind="bar", figsize=(10, 5), color=["#4C72B0", "#DD8452", "#555555"])
+    plt.title(f"Balance por Tipo de Hueso y Estado ({split_name})")
     plt.xlabel("Tipo de Hueso")
     plt.ylabel("Cantidad de Imágenes")
     plt.xticks(rotation=30, ha="right")
+    plt.legend(title="Estado")
     plt.tight_layout()
-    plt.savefig(output_dir / "balance_tipos_hueso.png", dpi=150)
+    plt.savefig(output_dir / "balance_tipos_hueso_etiqueta.png", dpi=150)
     plt.close()
-    print(f"  Gráfico guardado en {output_dir / 'balance_tipos_hueso.png'}")
+    print(f"  Gráfico guardado en {output_dir / 'balance_tipos_hueso_etiqueta.png'}")
 
     return df
 
@@ -279,8 +270,8 @@ def analizar_split(split_name: str):
     print("#" * 70)
 
     control_1_estructura(split_path)
-    conteo_por_hueso, total = control_2_cantidad(split_path)
     df = control_3_dataframe(split_path, split_name)
+    conteo_por_hueso, total, cruzado = control_2_cantidad(df, split_name)
     control_4_formatos(df)
     df = control_5_integridad(df)
     df = control_6_dimensiones(df)
@@ -312,6 +303,9 @@ def main():
     print("=" * 70)
     for split, df in resultados.items():
         print(f"  {split}: {len(df)} imágenes, {(~df['integra']).sum()} corruptas")
+        if "etiqueta" in df.columns:
+            conteo_et = df["etiqueta"].value_counts().to_dict()
+            print(f"    Desglose: {conteo_et}")
 
 
 if __name__ == "__main__":
