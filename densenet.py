@@ -11,17 +11,38 @@ model_urls = {
     'densenet169': 'https://download.pytorch.org/models/densenet169-b2777c0a.pth',
 }
 
-def densenet169(pretrained=False, **kwargs):
+def densenet169(pretrained=False, weights_path=None, **kwargs):
     r"""Densenet-169 model from
     `"Densely Connected Convolutional Networks" <https://arxiv.org/pdf/1608.06993.pdf>`_
 
     Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
+        pretrained (bool): If True, returns a model pre-trained on ImageNet.
+            Requires internet access to download weights the first time.
+        weights_path (str): Optional path to a local .pth weights file.
+            If provided, loads weights from disk instead of downloading.
     """
     model = DenseNet(num_init_features=64, growth_rate=32, block_config=(6, 12, 32, 32),
                      **kwargs)
-    if pretrained:
-        model.load_state_dict(model_zoo.load_url(model_urls['densenet169']), strict=False)
+    if weights_path is not None:
+        # Carga desde archivo local, sin necesidad de red
+        state_dict = torch.load(weights_path, map_location='cpu')
+        model.load_state_dict(state_dict, strict=False)
+        print(f'Pesos cargados desde: {weights_path}')
+    elif pretrained:
+        try:
+            model.load_state_dict(
+                model_zoo.load_url(model_urls['densenet169']),
+                strict=False
+            )
+        except Exception as e:
+            raise RuntimeError(
+                f'\n[ERROR] No se pudieron descargar los pesos preentrenados.\n'
+                f'Causa: {e}\n\n'
+                f'Solución: Descarga manualmente el archivo desde:\n'
+                f'  {model_urls["densenet169"]}\n'
+                f'y pásalo con el parámetro weights_path=, por ejemplo:\n'
+                f'  densenet169(pretrained=False, weights_path="ruta/al/densenet169-b2777c0a.pth")'
+            ) from e
     return model
 
 class _DenseLayer(nn.Sequential):
@@ -112,7 +133,7 @@ class DenseNet(nn.Module):
         # Official init from torch repo.
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal(m.weight.data)
+                nn.init.kaiming_normal_(m.weight.data)
             elif isinstance(m, nn.BatchNorm2d):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()

@@ -3,6 +3,9 @@ from torch.autograd import Variable
 import matplotlib.pyplot as plt
 from torchnet import meter
 
+# Selección dinámica del dispositivo: usa CUDA si está disponible, si no, CPU.
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 def plot_training(costs, accs):
     '''
     Plots curve of Cost vs epochs and Accuracy vs epochs for 'train' and 'valid' sets during training
@@ -30,8 +33,8 @@ def plot_training(costs, accs):
     plt.show()
 
 def n_p(x):
-    '''convert numpy float to Variable tensor float'''    
-    return Variable(torch.cuda.FloatTensor([x]), requires_grad=False)
+    '''convert numpy float to Variable tensor float'''
+    return Variable(torch.FloatTensor([x]).to(device), requires_grad=False)
 
 def get_count(df, cat):
     '''

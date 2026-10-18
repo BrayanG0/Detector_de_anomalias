@@ -3,7 +3,7 @@ import copy
 import torch
 from torchnet import meter
 from torch.autograd import Variable
-from utils import plot_training
+from utils import plot_training, device
 
 data_cat = ['train', 'valid'] # data categories
 
@@ -33,23 +33,23 @@ def train_model(model, criterion, optimizer, dataloaders, scheduler,
                 inputs = data['images'][0]
                 labels = data['label'].type(torch.FloatTensor)
                 # wrap them in Variable
-                inputs = Variable(inputs.cuda())
-                labels = Variable(labels.cuda())
+                inputs = Variable(inputs.to(device))
+                labels = Variable(labels.to(device))
                 # zero the parameter gradients
                 optimizer.zero_grad()
                 # forward
                 outputs = model(inputs)
                 outputs = torch.mean(outputs)
                 loss = criterion(outputs, labels, phase)
-                running_loss += loss.data[0]
+                running_loss += loss.item()
                 # backward + optimize only if in training phase
                 if phase == 'train':
                     loss.backward()
                     optimizer.step()
-                # statistics
-                preds = (outputs.data > 0.5).type(torch.cuda.FloatTensor)
-                running_corrects += torch.sum(preds == labels.data)
-                confusion_matrix[phase].add(preds, labels.data)
+                # statistics: unsqueeze para que ConfusionMeter reciba tensores 1D
+                preds = (outputs.data > 0.5).float().to(device).view(1)
+                running_corrects += torch.sum(preds == labels.data.view(1))
+                confusion_matrix[phase].add(preds, labels.data.view(1))
             epoch_loss = running_loss / dataset_sizes[phase]
             epoch_acc = running_corrects / dataset_sizes[phase]
             costs[phase].append(epoch_loss)
@@ -90,17 +90,17 @@ def get_metrics(model, criterion, dataloaders, dataset_sizes, phase='valid'):
         labels = data['label'].type(torch.FloatTensor)
         inputs = data['images'][0]
         # wrap them in Variable
-        inputs = Variable(inputs.cuda())
-        labels = Variable(labels.cuda())
+        inputs = Variable(inputs.to(device))
+        labels = Variable(labels.to(device))
         # forward
         outputs = model(inputs)
         outputs = torch.mean(outputs)
         loss = criterion(outputs, labels, phase)
         # statistics
-        running_loss += loss.data[0] * inputs.size(0)
-        preds = (outputs.data > 0.5).type(torch.cuda.FloatTensor)
-        running_corrects += torch.sum(preds == labels.data)
-        confusion_matrix.add(preds, labels.data)
+        running_loss += loss.item() * inputs.size(0)
+        preds = (outputs.data > 0.5).float().to(device).view(1)
+        running_corrects += torch.sum(preds == labels.data.view(1))
+        confusion_matrix.add(preds, labels.data.view(1))
 
     loss = running_loss / dataset_sizes[phase]
     acc = running_corrects / dataset_sizes[phase]

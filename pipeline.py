@@ -1,4 +1,5 @@
 import os
+import glob
 import pandas as pd
 from tqdm import tqdm
 import torch
@@ -10,36 +11,42 @@ data_cat = ['train', 'valid'] # data categories
 
 def get_study_level_data(study_type):
     """
-    Returns a dict, with keys 'train' and 'valid' and respective values as study level dataframes, 
-    these dataframes contain three columns 'Path', 'Count', 'Label'
-    Args:
-        study_type (string): one of the seven study type folder names in 'train/valid/test' dataset 
+    Returns a dict, with keys 'train' and 'valid' and respective values as study level dataframes.
+    Adapted for custom flattened JPG dataset.
     """
     study_data = {}
-    study_label = {'positive': 1, 'negative': 0}
     for phase in data_cat:
-        BASE_DIR = 'MURA-v1.0/%s/%s/' % (phase, study_type)
-        patients = list(os.walk(BASE_DIR))[0][1] # list of patient folder names
-        study_data[phase] = pd.DataFrame(columns=['Path', 'Count', 'Label'])
-        i = 0
-        for patient in tqdm(patients): # for each patient folder
-            for study in os.listdir(BASE_DIR + patient): # for each study in that patient folder
-                label = study_label[study.split('_')[1]] # get label 0 or 1
-                path = BASE_DIR + patient + '/' + study + '/' # path to this study
-                study_data[phase].loc[i] = [path, len(os.listdir(path)), label] # add new row
-                i+=1
+        BASE_DIR = f'MURA-v1.1/{phase}/{study_type}/'
+        # Buscar todas las imágenes JPG en subcarpetas (normal/abnormal)
+        all_files = glob.glob(BASE_DIR + '*/*.jpg')
+        
+        studies = {}
+        for f in all_files:
+            basename = os.path.basename(f) # ej: patient00006_study1_positive_image1.jpg
+            parts = basename.replace('.jpg', '').split('_')
+            
+            if len(parts) >= 3:
+                study_id = f"{parts[0]}_{parts[1]}" # ej: patient00006_study1
+                label_str = parts[2]
+                label = 1 if label_str == 'positive' else 0
+                
+                if study_id not in studies:
+                    studies[study_id] = {'files': [], 'label': label, 'label_str': label_str}
+                studies[study_id]['files'].append(f)
+        
+        # Crear DataFrame incluyendo la columna 'Path' para que utils.py pueda contar las clases
+        df = pd.DataFrame(columns=['Path', 'Files', 'Count', 'Label'])
+        for i, (s_id, data) in enumerate(studies.items()):
+            fake_path = f"{s_id}_{data['label_str']}" 
+            df.loc[i] = [fake_path, data['files'], len(data['files']), data['label']]
+        
+        study_data[phase] = df
     return study_data
 
 class ImageDataset(Dataset):
     """training dataset."""
 
     def __init__(self, df, transform=None):
-        """
-        Args:
-            df (pd.DataFrame): a pandas DataFrame with image path and labels.
-            transform (callable, optional): Optional transform to be applied
-                on a sample.
-        """
         self.df = df
         self.transform = transform
 
@@ -47,14 +54,17 @@ class ImageDataset(Dataset):
         return len(self.df)
 
     def __getitem__(self, idx):
-        study_path = self.df.iloc[idx, 0]
-        count = self.df.iloc[idx, 1]
+        file_list = self.df.iloc[idx]['Files']
+        label = self.df.iloc[idx]['Label']
+        
         images = []
-        for i in range(count):
-            image = pil_loader(study_path + 'image%s.png' % (i+1))
-            images.append(self.transform(image))
+        for f in file_list:
+            image = pil_loader(f)
+            if self.transform:
+                image = self.transform(image)
+            images.append(image)
+            
         images = torch.stack(images)
-        label = self.df.iloc[idx, 2]
         sample = {'images': images, 'label': label}
         return sample
 
@@ -77,8 +87,8 @@ def get_dataloaders(data, batch_size=8, study_level=False):
         ]),
     }
     image_datasets = {x: ImageDataset(data[x], transform=data_transforms[x]) for x in data_cat}
-    dataloaders = {x: DataLoader(image_datasets[x], batch_size=batch_size, shuffle=True, num_workers=4) for x in data_cat}
+    dataloaders = {x: DataLoader(image_datasets[x], batch_size=batch_size, shuffle=True, num_workers=0) for x in data_cat}
     return dataloaders
 
-if __name__=='main':
+if __name__=='__main__':
     pass

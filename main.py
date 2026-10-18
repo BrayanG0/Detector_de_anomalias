@@ -4,7 +4,7 @@ import pandas as pd
 import torch
 from torch.autograd import Variable
 from densenet import densenet169
-from utils import plot_training, n_p, get_count
+from utils import plot_training, n_p, get_count, device
 from train import train_model, get_metrics
 from pipeline import get_study_level_data, get_dataloaders
 
@@ -41,11 +41,11 @@ class Loss(torch.nn.modules.Module):
         return loss
 
 model = densenet169(pretrained=True)
-model = model.cuda()
+model = model.to(device)
 
 criterion = Loss(Wt1, Wt0)
 optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
-scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=1, verbose=True)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=1)
 
 # #### Train model
 model = train_model(model, criterion, optimizer, dataloaders, scheduler, dataset_sizes, num_epochs=5)
