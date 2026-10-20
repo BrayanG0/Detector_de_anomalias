@@ -1,5 +1,4 @@
-Coloca aqui tu modelo entrenado.
+Coloca aqui los pesos de tu modelo PyTorch MobileNet-V2.
 
-Nombre esperado por defecto:  mi_modelo.keras
-(tambien sirve .h5 o una carpeta SavedModel; si cambias el nombre,
-actualiza MODEL_PATH en app.py)
+Nombre esperado: model.pth
+Debe contener el state_dict con la capa final binaria classifier[1].

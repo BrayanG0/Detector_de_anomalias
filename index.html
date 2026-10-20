@@ -184,14 +184,14 @@
           <button id="analizar" class="boton claro" disabled>Analizar radiografía</button>
           <button id="limpiar" class="boton borde" disabled>Quitar imagen</button>
         </div>
-        <p id="demo" class="demo"><strong>Modo demostración.</strong> Aún no hay un modelo cargado: los resultados son simulados.</p>
+        <p id="demoEstado" class="demo"><strong>Modo demostración.</strong> Aún no hay un modelo cargado: los resultados son simulados.</p>
         <p id="error" class="error" hidden></p>
         <div id="resultado" class="resultado">
           <div id="cifra" class="cifra"></div>
           <p id="veredicto" class="veredicto"></p>
           <div class="escala"><div id="relleno" class="relleno"></div><div class="corte"></div></div>
           <div class="leyenda"><span>Normal</span><span>Anormal</span></div>
-          <p id="demo" class="aviso" hidden>Modo demostración: el servidor aún no tiene un modelo cargado, este resultado es simulado.</p>
+          <p id="avisoDemo" class="aviso" hidden>Modo demostración: el servidor aún no tiene un modelo cargado, este resultado es simulado.</p>
         </div>
         <p class="aviso">Herramienta académica. No reemplaza el diagnóstico de un profesional de la salud.</p>
       </div>
@@ -202,7 +202,7 @@
     <h2>Qué pasa cuando pulsas “Analizar”</h2>
     <p class="lead">Tres etapas, todas en el servidor del proyecto.</p>
     <div class="pasos">
-      <div class="paso"><h3>Preparación</h3><p>La imagen se convierte a escala de grises y se ajusta a 224 × 224 píxeles sin deformarla.</p></div>
+      <div class="paso"><h3>Preparación</h3><p>La imagen se convierte a RGB, se redimensiona a 224 × 224 píxeles y se normaliza.</p></div>
       <div class="paso"><h3>Predicción</h3><p>El modelo de aprendizaje profundo recibe la imagen y calcula una probabilidad de anormalidad.</p></div>
       <div class="paso"><h3>Resultado</h3><p>Si la probabilidad supera el umbral, el estudio se marca como posible anomalía.</p></div>
     </div>
@@ -261,11 +261,11 @@
   const cifra = document.getElementById("cifra");
   const veredicto = document.getElementById("veredicto");
   const relleno = document.getElementById("relleno");
-  const avisoDemo = document.getElementById("demo");
+  const avisoDemo = document.getElementById("avisoDemo");
   let actual = null;
 
   fetch("/estado").then((r) => r.json()).then((e) => {
-    if (e.demo) document.getElementById("demo").classList.add("visible");
+    if (e.demo) document.getElementById("demoEstado").classList.add("visible");
   }).catch(() => {});
 
   function mostrarError(t) { msgError.textContent = t; msgError.hidden = !t; }
@@ -310,10 +310,10 @@
       if (!r.ok) throw new Error(j.error || "Error en el servidor.");
 
       const pct = (j.probabilidad * 100).toFixed(1);
-      const esAnormal = j.etiqueta === "anormal";
+      const esAnormal = j.etiqueta === "Anormal";
       cifra.textContent = pct + " %";
       cifra.className = "cifra " + (esAnormal ? "anormal" : "normal");
-      veredicto.textContent = esAnormal ? "Posible anomalía detectada" : "Sin anomalía detectada";
+      veredicto.textContent = "Diagnóstico: " + j.etiqueta;
       veredicto.className = "veredicto " + (esAnormal ? "anormal" : "normal");
       relleno.style.background = esAnormal ? "var(--anormal)" : "var(--normal)";
       relleno.style.width = pct + "%";
