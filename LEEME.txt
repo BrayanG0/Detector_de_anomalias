@@ -1,0 +1,5 @@
+Coloca aqui tu modelo entrenado.
+
+Nombre esperado por defecto:  mi_modelo.keras
+(tambien sirve .h5 o una carpeta SavedModel; si cambias el nombre,
+actualiza MODEL_PATH en app.py)
