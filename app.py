@@ -7,6 +7,7 @@ from PIL import Image, UnidentifiedImageError
 from torchvision import transforms
 
 from model import RedColaborativaMURA
+from validacion import Puerta
 
 BASE_DIR = Path(__file__).resolve().parent
 MODEL_PATH = BASE_DIR / "modelo" / "best.pt"
@@ -80,6 +81,7 @@ def load_model():
 
 
 model = load_model()
+puerta = Puerta(DEVICE)
 
 
 @app.get("/")
@@ -104,12 +106,22 @@ def predict():
         return jsonify(error=f"Máximo {MAX_IMAGES} imágenes por estudio."), 400
 
     tensors = []
+    imagenes = []
     for uploaded in files:
         try:
             with Image.open(uploaded.stream) as image:
-                tensors.append(preprocess(image.convert("RGB")))
+                rgb_original = image.convert("RGB")
+                imagenes.append(rgb_original)
+                # Elimina cualquier tinte sutil de pantalla/cámara para que la IA reciba la radiografía pura
+                gris_limpio = image.convert("L").convert("RGB")
+                tensors.append(preprocess(gris_limpio))
         except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError):
             return jsonify(error=f"No se pudo leer '{uploaded.filename}' como imagen válida."), 400
+
+    # Puerta de validación: rechaza lo que no parece una radiografía (gatos, fotos, etc.)
+    rechazo = puerta.revisar(imagenes, [f.filename for f in files])
+    if rechazo:
+        return jsonify(error=rechazo), 422
 
     batch = torch.stack(tensors).to(DEVICE)
     with torch.inference_mode():
@@ -143,4 +155,6 @@ def request_too_large(_error):
 
 
 if __name__ == "__main__":
+    app.run(host="127.0.0.1", port=5000, debug=False)
+
     app.run(host="127.0.0.1", port=5000, debug=False)

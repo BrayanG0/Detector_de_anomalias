@@ -123,6 +123,12 @@
   .regiones { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
   .regiones span { border: 1px solid var(--linea); border-radius: 999px; padding: 4px 14px; font-size: .9rem; background: var(--panel); }
   .nota { color: var(--suave); max-width: 60ch; }
+  .tabla-metricas { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: .92rem; }
+  .tabla-metricas th, .tabla-metricas td { padding: 9px 10px; border-bottom: 1px solid var(--linea); }
+  .tabla-metricas th { font-weight: 600; color: var(--suave); text-align: left; }
+  .tabla-metricas td:not(:first-child), .tabla-metricas th:not(:first-child) { text-align: right; }
+  .tabla-metricas tbody tr:last-child td { border-bottom: none; }
+  .tabla-metricas tbody tr:hover { background: rgba(0,0,0,.03); }
 
   footer { margin-top: 80px; padding: 28px 0 40px; border-top: 1px solid var(--linea); color: var(--suave); font-size: .9rem; }
   @media (prefers-reduced-motion: reduce) {
@@ -213,15 +219,26 @@
     <p class="lead">Clasificación automática de radiografías musculoesqueléticas con el conjunto de datos MURA.</p>
     <div class="datos">
       <div>
+        <h3 style="margin-bottom:12px">Ficha técnica del modelo</h3>
         <dl id="ficha"></dl>
       </div>
       <div>
-        <h3>Regiones del conjunto MURA</h3>
-        <div class="regiones">
+        <h3 style="margin-bottom:12px">Rendimiento por región anatómica</h3>
+        <table class="tabla-metricas">
+          <thead>
+            <tr>
+              <th>Parte</th>
+              <th>Exactitud (Acc)</th>
+              <th>Sensibilidad</th>
+              <th>Especificidad</th>
+            </tr>
+          </thead>
+          <tbody id="tablaPartes"></tbody>
+        </table>
+        <div class="regiones" style="margin-top:20px">
           <span>Hombro</span><span>Húmero</span><span>Codo</span><span>Antebrazo</span>
           <span>Muñeca</span><span>Mano</span><span>Dedos</span>
         </div>
-        <p class="nota" style="margin-top:18px">El modelo no sustituye la lectura de un radiólogo: puede equivocarse y fue entrenado con imágenes de un solo hospital.</p>
       </div>
     </div>
   </section>
@@ -232,23 +249,36 @@
 </footer>
 
 <script>
-  /* ====== EDITA ESTO PARA TU PRESENTACIÓN ====== */
+  /* ====== DATOS REALES DEL MODELO ====== */
   const PROYECTO = {
     autora: "Karla",
     programa: "Ingeniería de Software · Universidad Surcolombiana",
     ficha: [
-      ["Conjunto de datos", "MURA"],
-      ["Tamaño de entrada", "224 × 224 px"],
-      ["Arquitectura", "—"],          // ej: "DenseNet-169"
-      ["Exactitud", "—"],             // ej: "84 %"
-      ["Sensibilidad", "—"],
-      ["Especificidad", "—"]
+      ["Conjunto de datos", "MURA v1.1"],
+      ["Tamaño de entrada", "320 × 320 px"],
+      ["Arquitectura", "Ensamble Colaborativo (4 IAs)"],
+      ["Exactitud global", "83.3 %"],
+      ["Sensibilidad global", "0.78 (78.0 %)"],
+      ["Especificidad global", "0.87 (86.6 %)"]
+    ],
+    porParte: [
+      { parte: "Muñeca", acc: "86.9 %", sens: "0.80", esp: "0.91" },
+      { parte: "Húmero", acc: "85.2 %", sens: "0.94", esp: "0.76" },
+      { parte: "Antebrazo", acc: "85.0 %", sens: "0.73", esp: "0.96" },
+      { parte: "Codo", acc: "84.8 %", sens: "0.74", esp: "0.92" },
+      { parte: "Dedo", acc: "81.1 %", sens: "0.78", esp: "0.84" },
+      { parte: "Hombro", acc: "80.9 %", sens: "0.85", esp: "0.77" },
+      { parte: "Mano", acc: "79.0 %", sens: "0.62", esp: "0.90" }
     ]
   };
   /* ============================================ */
 
   document.getElementById("ficha").innerHTML = PROYECTO.ficha
     .map(([k, v]) => "<div><dt>" + k + "</dt><dd>" + v + "</dd></div>").join("");
+
+  document.getElementById("tablaPartes").innerHTML = PROYECTO.porParte
+    .map((item) => "<tr><td><strong>" + item.parte + "</strong></td><td>" + item.acc + "</td><td>" + item.sens + "</td><td>" + item.esp + "</td></tr>")
+    .join("");
   document.getElementById("pie").textContent = PROYECTO.autora + " · " + PROYECTO.programa;
 
   const visor = document.getElementById("visor");
