@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OsteoScan · Detector de anomalías en radiografías</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --fondo: #eaeff2;
+    --panel: #f8fafb;
+    --tinta: #172630;
+    --suave: #52646f;
+    --linea: #c8d2d8;
+    --placa: #0a1115;
+    --placa2: #131e25;
+    --luz: #bfe3ee;
+    --normal: #1f7a5c;
+    --anormal: #b4531a;
+    --foco: #1d5fa8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fondo: #0f171c; --panel: #172229; --tinta: #e8eff3; --suave: #91a2ad;
+      --linea: #2a3a44; --normal: #4fc79f; --anormal: #f0894a; --foco: #6fb0f0;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--fondo); color: var(--tinta);
+    font: 400 16px/1.6 "IBM Plex Sans", system-ui, sans-serif; }
+  h1, h2, h3 { font-family: "Newsreader", Georgia, serif; font-weight: 600; margin: 0; }
+  a { color: inherit; }
+  .contenedor { max-width: 1040px; margin: 0 auto; padding: 0 20px; }
+  :focus-visible { outline: 3px solid var(--foco); outline-offset: 3px; }
+
+  /* Portada */
+  .portada { background: radial-gradient(900px 420px at 78% 40%, #1c3340 0%, var(--placa) 70%);
+    color: #e8f1f5; padding: 28px 0 72px; overflow: hidden; }
+  .barra { display: flex; justify-content: space-between; align-items: center; margin-bottom: 64px; }
+  .marca { font: 600 1.25rem "Newsreader", Georgia, serif; letter-spacing: .01em; }
+  .barra nav { display: flex; gap: 22px; font-size: .95rem; color: #a9bcc6; }
+  .barra nav a { text-decoration: none; }
+  .barra nav a:hover { color: #fff; }
+  .portada .contenedor.cuerpo { display: grid; grid-template-columns: 1.1fr .9fr; gap: 32px; align-items: center; }
+  .portada h1 { font-size: clamp(2.4rem, 6vw, 4rem); line-height: 1.04; max-width: 14ch; }
+  .portada p { color: #a9bcc6; max-width: 46ch; margin: 18px 0 28px; font-size: 1.1rem; }
+  .boton { display: inline-block; font: 500 1rem "IBM Plex Sans", sans-serif; background: var(--luz);
+    color: #0a1115; border: 0; border-radius: 4px; padding: 13px 22px; cursor: pointer; text-decoration: none; }
+  .boton:hover { background: #d5eef6; }
+  .boton:disabled { opacity: .4; cursor: not-allowed; }
+  .boton.claro { background: var(--tinta); color: var(--panel); }
+  .boton.claro:hover { background: var(--tinta); opacity: .88; }
+  .boton.borde { background: transparent; color: var(--tinta); border: 1px solid var(--linea); }
+  .hueso { width: 100%; max-width: 420px; justify-self: center; filter: drop-shadow(0 0 28px rgba(150,215,235,.28)); }
+  @media (max-width: 760px) {
+    .portada .contenedor.cuerpo { grid-template-columns: 1fr; }
+    .hueso { max-width: 280px; }
+    .barra nav { display: none; }
+  }
+
+  /* Secciones */
+  section.bloque { padding: 72px 0 0; }
+  .bloque h2 { font-size: clamp(1.7rem, 4vw, 2.3rem); line-height: 1.12; max-width: 22ch; }
+  .bloque .lead { color: var(--suave); max-width: 58ch; margin: 12px 0 28px; }
+
+  /* Analizador */
+  .grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; }
+  @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+  .visor { background: var(--placa); border: 2px dashed #34505e; border-radius: 8px; min-height: 400px;
+    display: grid; place-items: center; position: relative; overflow: hidden; cursor: pointer; transition: border-color .15s; }
+  .visor:hover, .visor.arrastrando { border-color: var(--luz); }
+  .visor.con-imagen { border-style: solid; border-color: #34505e; }
+  .visor img { display: none; max-width: 100%; max-height: 520px; }
+  .visor.con-imagen img { display: block; }
+  .visor.con-imagen .vacio { display: none; }
+  .vacio { color: #8da3ae; text-align: center; padding: 24px; }
+  .vacio strong { display: block; color: #e8f1f5; font-weight: 500; margin-bottom: 4px; }
+  .barrido { position: absolute; left: 0; right: 0; top: 0; height: 70px; pointer-events: none; opacity: 0;
+    background: linear-gradient(to bottom, transparent, rgba(150,215,235,.38), transparent); }
+  .visor.analizando .barrido { opacity: 1; animation: barrer 1.4s ease-in-out infinite alternate; }
+  @keyframes barrer { from { top: -70px; } to { top: 100%; } }
+
+  .panel { background: var(--panel); border: 1px solid var(--linea); border-radius: 8px; padding: 26px;
+    display: flex; flex-direction: column; gap: 18px; }
+  .panel h3 { font-size: 1.3rem; }
+  .acciones { display: flex; gap: 10px; flex-wrap: wrap; }
+  .resultado { display: none; }
+  .resultado.visible { display: block; }
+  .cifra { font: 600 3.4rem/1 "Newsreader", Georgia, serif; }
+  .veredicto { font: 600 1.35rem/1.2 "Newsreader", Georgia, serif; margin: 6px 0 14px; }
+  .normal { color: var(--normal); } .anormal { color: var(--anormal); }
+  .escala { position: relative; height: 10px; background: var(--linea); border-radius: 5px; }
+  .relleno { position: absolute; inset: 0 auto 0 0; border-radius: 5px; width: 0; transition: width .6s ease; }
+  .corte { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--tinta); left: 50%; }
+  .leyenda { display: flex; justify-content: space-between; color: var(--suave); font-size: .85rem; margin-top: 6px; }
+  .error { color: var(--anormal); margin: 0; }
+  .demo { display: none; background: #fff3d6; color: #6b4a00; border: 1px solid #e6c36a; border-radius: 6px;
+    padding: 10px 14px; font-size: .9rem; margin: 0; }
+  .demo.visible { display: block; }
+  @media (prefers-color-scheme: dark) { .demo { background: #3a2d0c; color: #f3d98b; border-color: #6b5316; } }
+  .aviso { color: var(--suave); font-size: .85rem; margin: 0; border-top: 1px solid var(--linea); padding-top: 14px; }
+
+  /* Cómo funciona (secuencia real) */
+  .pasos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; border: 1px solid var(--linea);
+    border-radius: 8px; background: var(--panel); overflow: hidden; counter-reset: p; }
+  .paso { padding: 26px; border-right: 1px solid var(--linea); counter-increment: p; }
+  .paso:last-child { border-right: 0; }
+  .paso::before { content: counter(p); font: 600 2rem "Newsreader", Georgia, serif; color: var(--foco); }
+  .paso h3 { font-size: 1.15rem; margin: 6px 0; }
+  .paso p { margin: 0; color: var(--suave); font-size: .95rem; }
+  @media (max-width: 760px) { .pasos { grid-template-columns: 1fr; }
+    .paso { border-right: 0; border-bottom: 1px solid var(--linea); } .paso:last-child { border-bottom: 0; } }
+
+  /* Sobre el proyecto */
+  .datos { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+  @media (max-width: 760px) { .datos { grid-template-columns: 1fr; gap: 28px; } }
+  dl { margin: 0; }
+  dl div { display: flex; justify-content: space-between; gap: 16px; padding: 11px 0; border-bottom: 1px solid var(--linea); }
+  dt { color: var(--suave); } dd { margin: 0; font-weight: 500; text-align: right; }
+  .regiones { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .regiones span { border: 1px solid var(--linea); border-radius: 999px; padding: 4px 14px; font-size: .9rem; background: var(--panel); }
+  .nota { color: var(--suave); max-width: 60ch; }
+  .tabla-metricas { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: .92rem; }
+  .tabla-metricas th, .tabla-metricas td { padding: 9px 10px; border-bottom: 1px solid var(--linea); }
+  .tabla-metricas th { font-weight: 600; color: var(--suave); text-align: left; }
+  .tabla-metricas td:not(:first-child), .tabla-metricas th:not(:first-child) { text-align: right; }
+  .tabla-metricas tbody tr:last-child td { border-bottom: none; }
+  .tabla-metricas tbody tr:hover { background: rgba(0,0,0,.03); }
+
+  footer { margin-top: 80px; padding: 28px 0 40px; border-top: 1px solid var(--linea); color: var(--suave); font-size: .9rem; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; } .relleno { transition: none; }
+    .visor.analizando .barrido { animation: none; top: 40%; }
+  }
+</style>
+</head>
+<body>
+
+<header class="portada">
+  <div class="contenedor">
+    <div class="barra">
+      <span class="marca">OsteoScan</span>
+      <nav aria-label="Secciones">
+        <a href="#probar">Probar</a><a href="#como">Cómo funciona</a><a href="#proyecto">El proyecto</a>
+      </nav>
+    </div>
+  </div>
+  <div class="contenedor cuerpo">
+    <div>
+      <h1>Una segunda lectura para tus radiografías</h1>
+      <p>Sube una radiografía musculoesquelética y un modelo de inteligencia artificial estima la probabilidad de que el estudio sea anormal.</p>
+      <a class="boton" href="#probar">Probar el modelo</a>
+    </div>
+    <svg class="hueso" viewBox="0 0 320 420" role="img" aria-label="Ilustración de un hueso largo en estilo radiografía">
+      <defs>
+        <linearGradient id="g" x1="0" x2="1">
+          <stop offset="0" stop-color="#7fb4c7" stop-opacity=".25"/>
+          <stop offset=".5" stop-color="#dff3fa" stop-opacity=".95"/>
+          <stop offset="1" stop-color="#7fb4c7" stop-opacity=".25"/>
+        </linearGradient>
+      </defs>
+      <g fill="url(#g)" stroke="#bfe3ee" stroke-opacity=".6" stroke-width="2">
+        <path d="M118 70c-30-6-48-38-26-56 16-12 36-4 46 8 10-12 30-20 46-8 22 18 4 50-26 56l8 52c4 20 4 40 0 60l-4 120c30 6 48 38 26 56-16 12-36 4-46-8-10 12-30 20-46 8-22-18-4-50 26-56l-4-120c-4-20-4-40 0-60z"/>
+      </g>
+      <g stroke="#0a1115" stroke-opacity=".35" stroke-width="2" fill="none">
+        <path d="M150 150c-4 40-4 80 0 120"/><path d="M170 150c4 40 4 80 0 120"/>
+      </g>
+    </svg>
+  </div>
+</header>
+
+<main class="contenedor">
+
+  <section class="bloque" id="probar">
+    <h2>Analiza una radiografía</h2>
+    <p class="lead">Arrastra una imagen PNG o JPG al visor, o haz clic para elegirla. El análisis tarda unos segundos.</p>
+    <div class="grid">
+      <div id="visor" class="visor" tabindex="0" role="button" aria-label="Elegir o arrastrar una radiografía">
+        <div class="vacio"><strong>Arrastra una radiografía aquí</strong>o haz clic para elegir un archivo</div>
+        <img id="vista" alt="Radiografía cargada">
+        <div class="barrido"></div>
+        <input id="archivo" type="file" accept="image/png,image/jpeg" hidden>
+      </div>
+      <div class="panel" aria-live="polite">
+        <h3>Resultado</h3>
+        <div class="acciones">
+          <button id="analizar" class="boton claro" disabled>Analizar radiografía</button>
+          <button id="limpiar" class="boton borde" disabled>Quitar imagen</button>
+        </div>
+        <p id="demoEstado" class="demo"><strong>Modo demostración.</strong> Aún no hay un modelo cargado: los resultados son simulados.</p>
+        <p id="error" class="error" hidden></p>
+        <div id="resultado" class="resultado">
+          <div id="cifra" class="cifra"></div>
+          <p id="veredicto" class="veredicto"></p>
+          <div class="escala"><div id="relleno" class="relleno"></div><div class="corte"></div></div>
+          <div class="leyenda"><span>Normal</span><span>Anormal</span></div>
+          <p id="avisoDemo" class="aviso" hidden>Modo demostración: el servidor aún no tiene un modelo cargado, este resultado es simulado.</p>
+        </div>
+        <p class="aviso">Herramienta académica. No reemplaza el diagnóstico de un profesional de la salud.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="bloque" id="como">
+    <h2>Qué pasa cuando pulsas “Analizar”</h2>
+    <p class="lead">Tres etapas, todas en el servidor del proyecto.</p>
+    <div class="pasos">
+      <div class="paso"><h3>Preparación</h3><p>La imagen se convierte a RGB, se redimensiona a 224 × 224 píxeles y se normaliza.</p></div>
+      <div class="paso"><h3>Predicción</h3><p>El modelo de aprendizaje profundo recibe la imagen y calcula una probabilidad de anormalidad.</p></div>
+      <div class="paso"><h3>Resultado</h3><p>Si la probabilidad supera el umbral, el estudio se marca como posible anomalía.</p></div>
+    </div>
+  </section>
+
+  <section class="bloque" id="proyecto">
+    <h2>Sobre el proyecto</h2>
+    <p class="lead">Clasificación automática de radiografías musculoesqueléticas con el conjunto de datos MURA.</p>
+    <div class="datos">
+      <div>
+        <h3 style="margin-bottom:12px">Ficha técnica del modelo</h3>
+        <dl id="ficha"></dl>
+      </div>
+      <div>
+        <h3 style="margin-bottom:12px">Rendimiento por región anatómica</h3>
+        <table class="tabla-metricas">
+          <thead>
+            <tr>
+              <th>Parte</th>
+              <th>Exactitud (Acc)</th>
+              <th>Sensibilidad</th>
+              <th>Especificidad</th>
+            </tr>
+          </thead>
+          <tbody id="tablaPartes"></tbody>
+        </table>
+        <div class="regiones" style="margin-top:20px">
+          <span>Hombro</span><span>Húmero</span><span>Codo</span><span>Antebrazo</span>
+          <span>Muñeca</span><span>Mano</span><span>Dedos</span>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="contenedor" id="pie"></div>
+</footer>
+
+<script>
+  /* ====== DATOS REALES DEL MODELO ====== */
+  const PROYECTO = {
+    autora: "Karla",
+    programa: "Ingeniería de Software · Universidad Surcolombiana",
+    ficha: [
+      ["Conjunto de datos", "MURA v1.1"],
+      ["Tamaño de entrada", "320 × 320 px"],
+      ["Arquitectura", "Ensamble Colaborativo (4 IAs)"],
+      ["Exactitud global", "83.3 %"],
+      ["Sensibilidad global", "0.78 (78.0 %)"],
+      ["Especificidad global", "0.87 (86.6 %)"]
+    ],
+    porParte: [
+      { parte: "Muñeca", acc: "86.9 %", sens: "0.80", esp: "0.91" },
+      { parte: "Húmero", acc: "85.2 %", sens: "0.94", esp: "0.76" },
+      { parte: "Antebrazo", acc: "85.0 %", sens: "0.73", esp: "0.96" },
+      { parte: "Codo", acc: "84.8 %", sens: "0.74", esp: "0.92" },
+      { parte: "Dedo", acc: "81.1 %", sens: "0.78", esp: "0.84" },
+      { parte: "Hombro", acc: "80.9 %", sens: "0.85", esp: "0.77" },
+      { parte: "Mano", acc: "79.0 %", sens: "0.62", esp: "0.90" }
+    ]
+  };
+  /* ============================================ */
+
+  document.getElementById("ficha").innerHTML = PROYECTO.ficha
+    .map(([k, v]) => "<div><dt>" + k + "</dt><dd>" + v + "</dd></div>").join("");
+
+  document.getElementById("tablaPartes").innerHTML = PROYECTO.porParte
+    .map((item) => "<tr><td><strong>" + item.parte + "</strong></td><td>" + item.acc + "</td><td>" + item.sens + "</td><td>" + item.esp + "</td></tr>")
+    .join("");
+  document.getElementById("pie").textContent = PROYECTO.autora + " · " + PROYECTO.programa;
+
+  const visor = document.getElementById("visor");
+  const archivo = document.getElementById("archivo");
+  const vista = document.getElementById("vista");
+  const btnAnalizar = document.getElementById("analizar");
+  const btnLimpiar = document.getElementById("limpiar");
+  const msgError = document.getElementById("error");
+  const caja = document.getElementById("resultado");
+  const cifra = document.getElementById("cifra");
+  const veredicto = document.getElementById("veredicto");
+  const relleno = document.getElementById("relleno");
+  const avisoDemo = document.getElementById("avisoDemo");
+  let actual = null;
+
+  fetch("/estado").then((r) => r.json()).then((e) => {
+    if (e.demo) document.getElementById("demoEstado").classList.add("visible");
+  }).catch(() => {});
+
+  function mostrarError(t) { msgError.textContent = t; msgError.hidden = !t; }
+
+  function cargar(file) {
+    if (!file || !file.type.startsWith("image/")) { mostrarError("El archivo debe ser una imagen PNG o JPG."); return; }
+    mostrarError("");
+    caja.classList.remove("visible");
+    actual = file;
+    vista.src = URL.createObjectURL(file);
+    visor.classList.add("con-imagen");
+    btnAnalizar.disabled = false;
+    btnLimpiar.disabled = false;
+  }
+
+  visor.addEventListener("click", () => archivo.click());
+  visor.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); archivo.click(); } });
+  archivo.addEventListener("change", () => cargar(archivo.files[0]));
+  ["dragenter", "dragover"].forEach((ev) => visor.addEventListener(ev, (e) => { e.preventDefault(); visor.classList.add("arrastrando"); }));
+  ["dragleave", "drop"].forEach((ev) => visor.addEventListener(ev, (e) => { e.preventDefault(); visor.classList.remove("arrastrando"); }));
+  visor.addEventListener("drop", (e) => cargar(e.dataTransfer.files[0]));
+
+  btnLimpiar.addEventListener("click", () => {
+    actual = null; archivo.value = ""; vista.removeAttribute("src");
+    visor.classList.remove("con-imagen");
+    caja.classList.remove("visible");
+    btnAnalizar.disabled = true; btnLimpiar.disabled = true;
+    mostrarError("");
+  });
+
+  btnAnalizar.addEventListener("click", async () => {
+    if (!actual) return;
+    btnAnalizar.disabled = true;
+    btnAnalizar.textContent = "Analizando…";
+    visor.classList.add("analizando");
+    mostrarError("");
+    try {
+      const datos = new FormData();
+      datos.append("imagen", actual);
+      const r = await fetch("/predict", { method: "POST", body: datos });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "Error en el servidor.");
+
+      const pct = (j.probabilidad * 100).toFixed(1);
+      const esAnormal = j.etiqueta === "Anormal";
+      cifra.textContent = pct + " %";
+      cifra.className = "cifra " + (esAnormal ? "anormal" : "normal");
+      veredicto.textContent = "Diagnóstico: " + j.etiqueta;
+      veredicto.className = "veredicto " + (esAnormal ? "anormal" : "normal");
+      relleno.style.background = esAnormal ? "var(--anormal)" : "var(--normal)";
+      relleno.style.width = pct + "%";
+      avisoDemo.hidden = !j.demo;
+      caja.classList.add("visible");
+    } catch (err) {
+      mostrarError(err.message === "Failed to fetch"
+        ? "No se pudo conectar con el servidor. Revisa que app.py esté corriendo."
+        : err.message);
+    } finally {
+      visor.classList.remove("analizando");
+      btnAnalizar.disabled = false;
+      btnAnalizar.textContent = "Analizar radiografía";
+    }
+  });
+</script>
+</body>
+</html>

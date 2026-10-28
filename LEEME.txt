@@ -1,0 +1,4 @@
+Coloca aqui los pesos de tu modelo PyTorch MobileNet-V2.
+
+Nombre esperado: model.pth
+Debe contener el state_dict con la capa final binaria classifier[1].

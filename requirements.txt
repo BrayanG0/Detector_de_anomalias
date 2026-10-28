@@ -1,0 +1,8 @@
+flask
+torch>=2.0
+torchvision>=0.15
+pillow
+numpy
+scipy
+scipy
+numpy
